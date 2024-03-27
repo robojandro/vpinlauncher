@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/pkg/errors"
+	"github.com/robojandro/vpinscoreparser"
 )
 
 func main() {
@@ -71,6 +72,7 @@ func main() {
 
 	btnContainer := container.NewStack(playBtn)
 	imgContainer := container.NewStack(img)
+	scoresText := widget.NewLabel("High Scores")
 
 	listView.OnSelected = func(id widget.ListItemID) {
 		currentFileName = tables[id]
@@ -85,17 +87,59 @@ func main() {
 			}
 		}
 		imgContainer.Objects[0] = img
+
+		// currently I use the longer form table names for the snapshot pictures
+		// but to fetch highscores I either need:
+		// a) a mapping to those table names to rom
+		// or b) a way to query the rom from vpinball
+		// I can start with a hardcoded mapping and then see about automatting that some how
+		score, err := fetchHiScore(tables[id])
+		if err != nil {
+			fmt.Println(err)
+		}
+		if score == -1 {
+			scoresText.SetText("Hi Score: (table unsupported)\n")
+		} else {
+			scoresText.SetText(fmt.Sprintf("Hi Score: %d\n", score))
+		}
 	}
 
-	vSplit := container.NewVSplit(imgContainer, btnContainer)
-	vSplit.Offset = .8
+	innerVSplit := container.NewVSplit(imgContainer, btnContainer)
+	innerVSplit.Offset = .9
 
-	hSplit := container.NewHSplit(listView, vSplit)
+	scoresContainer := container.NewStack(scoresText)
+
+	outerVSplit := container.NewVSplit(scoresContainer, innerVSplit)
+	outerVSplit.Offset = .1
+
+	hSplit := container.NewHSplit(listView, outerVSplit)
 	hSplit.Offset = .24
 
 	w.SetContent(hSplit)
 
 	w.ShowAndRun()
+}
+
+func fetchHiScore(tableName string) (int64, error) {
+	rom := tableToRomName(tableName)
+	if rom == "" {
+		return -1, nil
+	}
+
+	// only currently supported files - the testing batch are whitelisted so far
+	romDir := "/home/marco/.pinmame/nvram/"
+	vpinScoreParser := vpinscoreparser.NewVPinScoreParser(romDir)
+	contents, err := vpinScoreParser.ReadNVRamFile(rom)
+	if err != nil {
+		return -1, fmt.Errorf("failed reading rom: %s\n", err)
+	}
+
+	score, err := vpinScoreParser.Parse(rom, contents)
+	if err != nil {
+		return -1, fmt.Errorf("failed parsing score: %s\n", err)
+	}
+
+	return score, nil
 }
 
 func loadImage(fileName string) (*canvas.Image, error) {
@@ -167,4 +211,31 @@ func scanTables(tablesPath string) ([]string, error) {
 		tables = append(tables, found.Name())
 	}
 	return tables, nil
+}
+
+func tableToRomName(tableName string) string {
+	// split by spaces - most tables are name with spaces
+	spaceParts := strings.Split(tableName, " ")
+	// if there are underscores that follow, the split by that and take the first term
+	parts := strings.Split(spaceParts[0], "_")
+
+	scan := strings.ToLower(parts[0])
+	for table, rom := range tableMapping {
+		if strings.HasPrefix(scan, table) {
+			return rom
+		}
+	}
+	return ""
+}
+
+var tableMapping = map[string]string{
+	"barracora":    "barra_l1.nv",
+	"elektra":      "elektra.nv",
+	"firepower":    "frpwr_b7.nv",
+	"seawitch":     "seawitch.nv",
+	"warlok":       "wrlok_l3.nv",
+	"black_knight": "bk_l4.nv",
+	"fathom":       "fathom.nv",
+	"scorpion":     "scrpn_l1.nv",
+	"viper":        "viper.nv",
 }
