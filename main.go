@@ -17,6 +17,30 @@ import (
 	"github.com/pkg/errors"
 )
 
+type VpinList struct {
+	widget.List
+
+	Length       func() int
+	CreateItem   func() fyne.CanvasObject
+	UpdateItem   func(widget.ListItemID, fyne.CanvasObject)
+	onSelected   func(widget.ListItemID)
+	onUnselected func(widget.ListItemID)
+}
+
+func NewVpinList(
+	length func() int,
+	createItem func() fyne.CanvasObject,
+	updateItem func(widget.ListItemID, fyne.CanvasObject),
+) *VpinList {
+	list := &VpinList{
+		Length:     length,
+		CreateItem: createItem,
+		UpdateItem: updateItem,
+	}
+	list.ExtendBaseWidget(list)
+	return list
+}
+
 func main() {
 	a := app.New()
 	w := a.NewWindow("Visual Pinball Launcher")
@@ -33,7 +57,8 @@ func main() {
 		errD.Show()
 	}
 
-	listView := widget.NewList(func() int {
+	// listView := widget.NewList(func() int {
+	listView := NewVpinList(func() int {
 		return len(tables)
 	}, func() fyne.CanvasObject {
 		return widget.NewLabel("template")
